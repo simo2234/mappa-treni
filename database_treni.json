@@ -1,0 +1,41 @@
+[
+  {
+    "nome": "Regionale 21250",
+    "linea": "Ferrovia Napoli-Salerno",
+    "fermate": [
+      { "stazione": "Napoli Centrale", "arr": "06:10", "part": "06:15" },
+      { "stazione": "Napoli San Giovanni-Barra", "arr": "06:22", "part": "06:23" },
+      { "stazione": "Portici-Ercolano", "arr": "06:28", "part": "06:29" },
+      { "stazione": "Torre del Greco", "arr": "06:34", "part": "06:35" },
+      { "stazione": "Torre Annunziata Centrale", "arr": "06:44", "part": "06:45" },
+      { "stazione": "Pompei", "arr": "06:50", "part": "06:51" },
+      { "stazione": "Scafati", "arr": "06:56", "part": "06:57" },
+      { "stazione": "Angri", "arr": "07:02", "part": "07:03" },
+      { "stazione": "Pagani", "arr": "07:08", "part": "07:09" },
+      { "stazione": "Nocera Inferiore", "arr": "07:14", "part": "07:16" },
+      { "stazione": "Salerno", "arr": "07:30", "part": "07:35" }
+    ]
+  },
+  {
+    "nome": "Regionale 21254",
+    "linea": "Ferrovia Napoli-Salerno",
+    "fermate": [
+      { "stazione": "Napoli Centrale", "arr": "07:10", "part": "07:15" },
+      { "stazione": "Portici-Ercolano", "arr": "07:28", "part": "07:29" },
+      { "stazione": "Torre del Greco", "arr": "07:34", "part": "07:35" },
+      { "stazione": "Pompei", "arr": "07:50", "part": "07:51" },
+      { "stazione": "Nocera Inferiore", "arr": "08:14", "part": "08:16" },
+      { "stazione": "Salerno", "arr": "08:30", "part": "08:35" }
+    ]
+  },
+  {
+    "nome": "Metropolitano 21301",
+    "linea": "Napoli Piazza Garibaldi-Salerno",
+    "fermate": [
+      { "stazione": "Napoli Piazza Garibaldi", "arr": "08:20", "part": "08:25" },
+      { "stazione": "Napoli San Giovanni-Barra", "arr": "08:32", "part": "08:33" },
+      { "stazione": "Torre Annunziata Centrale", "arr": "08:55", "part": "08:56" },
+      { "stazione": "Salerno", "arr": "09:40", "part": "09:45" }
+    ]
+  }
+]
