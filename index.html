@@ -104,7 +104,7 @@
         }
 
         // --- 3. CARICAMENTO DATI E BINARI ---
-        fetch('campania_binari.geojson')
+        fetch('Campania.geojson')
             .then(response => response.json())
             .then(geojsonData => {
                 document.getElementById('status').innerText = "Binari caricati. Treno in attesa...";
