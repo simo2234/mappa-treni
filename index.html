@@ -40,7 +40,7 @@
 
 <script>
     // --- 1. CONFIGURAZIONE FILE ---
-    const FILE_BINARI = ['binari_lazio.geojson', 'binari_campania.geojson'];
+    const FILE_BINARI = ['Binari_Veneto.geojson', 'Binari_Emilia-Romagna.geojson', 'Binari_Marche.geojson', 'Binari_Abruzzo.geojson', 'Binari_Molise.geojson', 'Binari_Puglia.geojson'];
     const FILE_STAZIONI = ['stazioni_lazio.geojson', 'stazioni_campania.geojson'];
     const FILE_TRENI = 'database_treni.json';
 
@@ -157,3 +157,21 @@
     function convertiInSecondi(hms) {
         const p = hms.split(':');
         return (+p[0]) * 3600 + (+p[1]) * 60 + (+p[2] || 0);
+    }
+
+    function resetTempo() { virtualTime = new Date(); aggiornaUI(); }
+    function impostaOra() {
+        const [h, m, s] = document.getElementById('input-ora').value.split(':');
+        virtualTime.setHours(h, m, s || 0);
+    }
+    function aggiornaUI() {
+        document.getElementById('txt-ora').innerText = virtualTime.toLocaleTimeString();
+    }
+
+    setInterval(() => { virtualTime.setSeconds(virtualTime.getSeconds() + 1); aggiornaUI(); }, 1000);
+
+    // Lancio iniziale
+    init();
+</script>
+</body>
+</html>
