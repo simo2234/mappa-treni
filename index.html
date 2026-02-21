@@ -1,47 +1,114 @@
 <!DOCTYPE html>
-<html>
+<html lang="it">
 <head>
-    <title>Mappa Treni Italia</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Train Map - Italia</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
     <style>
+        body, html { margin: 0; padding: 0; height: 100%; }
         #map { height: 100vh; width: 100%; }
-        body { margin: 0; }
+        .info-box {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+            font-family: Arial, sans-serif;
+        }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script>
-        // Inizializza la mappa sull'Italia
-        var map = L.map('map').setView([41.9028, 12.4964], 6);
 
+    <div class="info-box">
+        <b>Monitoraggio Treni</b><br>
+        Stato: <span id="status">In aggiornamento...</span>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // 1. Inizializzazione Mappa centrata sull'Italia
+        const map = L.map('map').setView([41.9028, 12.4964], 6);
+        
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        // Esempio: Un "treno" fermo a Roma Termini
-        L.marker([41.9009, 12.5020]).addTo(map)
-            .bindPopup('Treno 9604 - Roma Termini')
-            .openPopup();
+        // 2. Caricamento Stazioni (dal file stazioni.json che hai creato)
+        fetch('stazioni.json')
+            .then(response => response.json())
+            .then(stazioni => {
+                stazioni.forEach(s => {
+                    const lat = s.stop_lat || s.lat;
+                    const lon = s.stop_lon || s.lon;
+                    const nome = s.stop_name || s.name;
+                    
+                    L.circleMarker([lat, lon], {
+                        radius: 3,
+                        color: '#3388ff',
+                        fillOpacity: 0.5
+                    }).addTo(map).bindPopup(nome);
+                });
+                document.getElementById('status').innerText = "Stazioni caricate";
+            })
+            .catch(err => {
+                console.error("Errore stazioni:", err);
+                document.getElementById('status').innerText = "Errore dati stazioni";
+            });
+
+        // 3. Esempio di Treno in movimento (Logica Interpolazione)
+        // In un progetto reale, questi dati arriverebbero da 'orari_treni.json'
+        const trenoEsempio = {
+            id: "FR 9604",
+            partenza: { lat: 41.9009, lon: 12.5020, ora: "14:00" }, // Roma
+            arrivo: { lat: 45.4847, lon: 9.2048, ora: "17:00" }     // Milano
+        };
+
+        const markerTreno = L.marker([trenoEsempio.partenza.lat, trenoEsempio.partenza.lon], {
+            icon: L.icon({
+                iconUrl: 'https://cdn-icons-png.flaticon.com/512/725/725304.png', // Icona treno
+                iconSize: [30, 30]
+            })
+        }).addTo(map);
+
+        function muoviTreno() {
+            const oraAttuale = new Date();
+            const oraInSecondi = oraAttuale.getHours() * 3600 + oraAttuale.getMinutes() * 60 + oraAttuale.getSeconds();
+
+            const parseOra = (hms) => {
+                const [h, m] = hms.split(':').map(Number);
+                return h * 3600 + m * 60;
+            };
+
+            const tInizio = parseOra(trenoEsempio.partenza.ora);
+            const tFine = parseOra(trenoEsempio.arrivo.ora);
+
+            if (oraInSecondi >= tInizio && oraInSecondi <= tFine) {
+                // Calcolo percentuale viaggio
+                const pct = (oraInSecondi - tInizio) / (tFine - tInizio);
+                
+                // Calcolo nuova posizione (lineare)
+                const dLat = trenoEsempio.partenza.lat + (trenoEsempio.arrivo.lat - trenoEsempio.partenza.lat) * pct;
+                const dLon = trenoEsempio.partenza.lon + (trenoEsempio.arrivo.lon - trenoEsempio.partenza.lon) * pct;
+                
+                markerTreno.setLatLng([dLat, dLon]);
+                markerTreno.bindPopup(`<b>${trenoEsempio.id}</b><br>In viaggio verso Milano`).openPopup();
+            } else {
+                markerTreno.setOpacity(0); // Nascondi se fuori orario
+            }
+        }
+
+        // Aggiorna la posizione ogni secondo
+        setInterval(muoviTreno, 1000);
+
     </script>
 </body>
 </html>
-const stazioniItaliane = [
-    { nome: "Roma Termini", lat: 41.9009, lon: 12.5020 },
-    { nome: "Milano Centrale", lat: 45.4847, lon: 9.2048 },
-    { nome: "Napoli Centrale", lat: 40.8530, lon: 14.2724 },
-    { nome: "Torino Porta Nuova", lat: 45.0622, lon: 7.6784 },
-    { nome: "Firenze Santa Maria Novella", lat: 43.7765, lon: 11.2478 },
-    { nome: "Bologna Centrale", lat: 44.5058, lon: 11.3418 },
-    { nome: "Venezia Santa Lucia", lat: 45.4411, lon: 12.3210 },
-    { nome: "Bari Centrale", lat: 41.1168, lon: 16.8700 },
-    { nome: "Palermo Centrale", lat: 38.1068, lon: 13.3672 },
-    { nome: "Genova Piazza Principe", lat: 44.4169, lon: 8.9213 }
-];
-
-// Funzione per aggiungerle alla mappa Leaflet
-stazioniItaliane.forEach(stazione => {
-    L.marker([stazione.lat, stazione.lon])
-     .addTo(map)
-     .bindPopup(stazione.nome);
-});
