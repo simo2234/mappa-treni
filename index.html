@@ -2,47 +2,34 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>Campania Rail Simulator Pro</title>
+    <title>Simulatore Ferroviario Centro-Sud</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif; background: #2c3e50; }
-        #map { height: 100vh; width: 100%; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif; }
+        #map { height: 100vh; width: 100%; background: #1a1a1a; }
         
-        .panel {
-            position: absolute; top: 10px; left: 10px; z-index: 1000;
-            background: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3); width: 300px;
+        .ui-panel {
+            position: absolute; top: 15px; left: 15px; z-index: 1000;
+            background: rgba(255, 255, 255, 0.9); padding: 20px; border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4); width: 300px;
         }
-        .clock { font-size: 32px; font-weight: bold; text-align: center; display: block; color: #2c3e50; font-family: monospace; }
-        .time-controls { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
-        .inputs { display: flex; gap: 5px; }
-        input { flex: 1; padding: 5px; border: 1px solid #ccc; border-radius: 4px; }
-        .btn-group { display: flex; gap: 4px; }
-        button { flex: 1; padding: 8px 2px; cursor: pointer; border: none; background: #3498db; color: white; border-radius: 4px; font-size: 11px; }
+        .clock { font-size: 32px; font-weight: bold; color: #2c3e50; font-family: monospace; display: block; text-align: center; }
+        .controls { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; }
+        .status-box { margin-top: 10px; font-size: 12px; color: #555; border-top: 1px solid #ccc; padding-top: 5px; }
+        input[type="time"] { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ddd; }
+        button { padding: 10px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 5px; font-weight: bold; }
         button:hover { background: #2980b9; }
-        .btn-now { background: #27ae60; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div class="panel">
-    <span class="clock" id="txt-ora">00:00:00</span>
-    
-    <div class="time-controls">
-        <div class="inputs">
-            <input type="date" id="input-data" onchange="syncTime()">
-            <input type="time" id="input-ora" step="1" onchange="syncTime()">
-        </div>
-        <button class="btn-now" onclick="resetToNow()">🕒 TORNA AL PRESENTE</button>
-        <div class="btn-group">
-            <button onclick="setSpeed(-10)">⏪ x10</button>
-            <button onclick="togglePause()" id="btn-pausa">⏸ Pausa</button>
-            <button onclick="setSpeed(1)">▶️ 1x</button>
-            <button onclick="setSpeed(10)">x10 ⏩</button>
-            <button onclick="setSpeed(100)">x100</button>
-        </div>
+<div class="ui-panel">
+    <span class="clock" id="txt-ora">12:00:00</span>
+    <div class="controls">
+        <input type="time" id="input-ora" step="1" onchange="impostaOra()">
+        <button onclick="resetTempo()">TORNA AL PRESENTE</button>
     </div>
-    <div id="status" style="font-size: 11px; color: #666;">Caricamento dati...</div>
+    <div id="status" class="status-box">Caricamento file GeoJSON...</div>
 </div>
 
 <div id="map"></div>
@@ -52,120 +39,121 @@
 <script src="https://cdn.jsdelivr.net/gh/bbecquet/Leaflet.RotatedMarker/leaflet.rotatedMarker.js"></script>
 
 <script>
+    // --- 1. CONFIGURAZIONE FILE ---
+    const FILE_BINARI = ['binari_lazio.geojson', 'binari_campania.geojson'];
+    const FILE_STAZIONI = ['stazioni_lazio.geojson', 'stazioni_campania.geojson'];
+    const FILE_TRENI = 'database_treni.json';
+
     // --- 2. INIZIALIZZAZIONE MAPPA ---
-    const map = L.map('map').setView([40.85, 14.27], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const map = L.map('map', { zoomControl: false }).setView([41.5, 13.5], 8);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
     let virtualTime = new Date();
-    let multiplier = 1;
-    let paused = false;
+    const pulisciNome = (n) => n.toString().toLowerCase().trim().replace(/\s+/g, ' ');
 
-    // --- 3. MOTORE DEL TEMPO ---
-    function syncTime() {
-        const d = document.getElementById('input-data').value;
-        const t = document.getElementById('input-ora').value;
-        if(d && t) { virtualTime = new Date(d + 'T' + t); paused = true; updateUI(); }
-    }
+    // --- 3. CARICAMENTO MULTI-FILE ---
+    async function init() {
+        try {
+            // Carichiamo tutti i file in parallelo
+            const fetchBinari = FILE_BINARI.map(f => fetch(f).then(res => res.json()));
+            const fetchStazioni = FILE_STAZIONI.map(f => fetch(f).then(res => res.json()));
+            const fetchTreni = fetch(FILE_TRENI).then(res => res.json());
 
-    function resetToNow() {
-        virtualTime = new Date(); multiplier = 1; paused = false; updateUI();
-    }
+            const [dataBinari, dataStazioni, treniDB] = await Promise.all([
+                Promise.all(fetchBinari),
+                Promise.all(fetchStazioni),
+                fetchTreni
+            ]);
 
-    function togglePause() { paused = !paused; document.getElementById('btn-pausa').innerText = paused ? "▶️ Play" : "⏸ Pausa"; }
-    function setSpeed(s) { multiplier = s; paused = false; }
+            // Uniamo i binari in un'unica collezione
+            const reteUnificata = {
+                type: "FeatureCollection",
+                features: dataBinari.flatMap(g => g.features)
+            };
 
-    function updateUI() {
-        document.getElementById('txt-ora').innerText = virtualTime.toLocaleTimeString();
-        document.getElementById('input-data').value = virtualTime.toISOString().split('T')[0];
-        document.getElementById('input-ora').value = virtualTime.toTimeString().split(' ')[0];
-    }
+            // Uniamo le stazioni
+            const stazioniUnificate = {
+                type: "FeatureCollection",
+                features: dataStazioni.flatMap(g => g.features)
+            };
 
-    setInterval(() => {
-        if (!paused) {
-            virtualTime.setSeconds(virtualTime.getSeconds() + multiplier);
-            updateUI();
+            document.getElementById('status').innerText = "Rete caricata. Simulazione attiva.";
+
+            // Disegniamo la rete sulla mappa
+            L.geoJSON(reteUnificata, { 
+                style: { color: '#444', weight: 1.5, opacity: 0.6 } 
+            }).addTo(map);
+
+            // Avviamo ogni treno
+            treniDB.forEach(treno => {
+                const tracciato = reteUnificata.features.find(f => 
+                    pulisciNome(f.properties.name || "") === pulisciNome(treno.linea)
+                );
+                if (tracciato) {
+                    avviaSimulazioneTreno(tracciato, treno, stazioniUnificate);
+                } else {
+                    console.warn(`Binari non trovati per: ${treno.linea}`);
+                }
+            });
+
+        } catch (err) {
+            document.getElementById('status').innerHTML = "<span style='color:red'>Errore caricamento file! Controlla i nomi.</span>";
+            console.error(err);
         }
-    }, 1000);
+    }
 
-    const toSec = (t) => t.split(':').reduce((h, m) => h * 3600 + m * 60);
-
-    // --- 4. CARICAMENTO GEOJSON E LOGICA TRENI ---
-    // Carichiamo tutto: binari, stazioni e il database treni appena creato
-Promise.all([
-    fetch('Binari_Campania-Lazio.geojson').then(r => r.json()),
-    fetch('stazioni_campania.geojson').then(r => r.json()),
-    fetch('database_treni.json').then(r => r.json()) 
-]).then(([binariData, stazioniData, treniDB]) => {
-    
-    // Disegna i binari
-    L.geoJSON(binariData, { style: { color: '#bdc3c7', weight: 2, opacity: 0.4 } }).addTo(map);
-
-    // Avvia ogni treno presente nel JSON
-    treniDB.forEach(treno => {
-        const percorsoObj = binariData.features.find(f => 
-            pulisciNome(f.properties.name) === pulisciNome(treno.linea)
-        );
-        
-        if (percorsoObj) {
-            startTrain(percorsoObj, treno, stazioniData);
-        } else {
-            console.error("Non trovo i binari per la linea:", treno.linea);
-        }
-    });
-});
-    
-    function startTrain(lineaGeo, dati, stazioniGeo) {
-        const icon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/725/725304.png', iconSize: [25, 25] });
-        const marker = L.marker([0,0], { icon: icon, rotationAngle: 0 }).addTo(map);
+    // --- 4. MOTORE DI MOVIMENTO ---
+    function avviaSimulazioneTreno(lineaGeo, dati, stazioniGeo) {
+        const icona = L.icon({ 
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/725/725304.png', 
+            iconSize: [22, 22] 
+        });
+        const marker = L.marker([0, 0], { icon: icona, rotationAngle: 0 }).addTo(map);
+        marker.bindPopup(`<b>${dati.nome}</b><br>Linea: ${dati.linea}`);
 
         setInterval(() => {
-            const adesso = virtualTime.getHours() * 3600 + virtualTime.getMinutes() * 60 + virtualTime.getSeconds();
-            let currentPos = null;
-            let currentBearing = 0;
+            const oraAttuale = virtualTime.getHours() * 3600 + virtualTime.getMinutes() * 60 + virtualTime.getSeconds();
+            let posPunto = null;
+            let angolo = 0;
 
             for (let i = 0; i < dati.fermate.length - 1; i++) {
                 const f1 = dati.fermate[i];
                 const f2 = dati.fermate[i+1];
 
-                const t_arr1 = toSec(f1.arr), t_part1 = toSec(f1.part);
-                const t_arr2 = toSec(f2.arr);
-
-                // Trova le coordinate delle stazioni nel tuo file stazioni
-                const s1 = stazioniGeo.features.find(s => s.properties.name === f1.stazione);
-                const s2 = stazioniGeo.features.find(s => s.properties.name === f2.stazione);
+                const s1 = stazioniGeo.features.find(s => pulisciNome(s.properties.name) === pulisciNome(f1.stazione));
+                const s2 = stazioniGeo.features.find(s => pulisciNome(s.properties.name) === pulisciNome(f2.stazione));
 
                 if (s1 && s2) {
-                    // Calcola la posizione delle stazioni lungo la linea (distanza in km)
-                    const dist1 = turf.nearestPointOnLine(lineaGeo, s1).properties.location;
-                    const dist2 = turf.nearestPointOnLine(lineaGeo, s2).properties.location;
+                    const t_partenza = convertiInSecondi(f1.part);
+                    const t_arrivo_succ = convertiInSecondi(f2.arr);
 
-                    // FERMO IN STAZIONE
-                    if (adesso >= t_arr1 && adesso <= t_part1) {
-                        currentPos = turf.along(lineaGeo, dist1);
-                        break;
-                    }
-                    // IN VIAGGIO
-                    if (adesso > t_part1 && adesso < t_arr2) {
-                        const progress = (adesso - t_part1) / (t_arr2 - t_part1);
-                        const actualDist = dist1 + (dist2 - dist1) * progress;
-                        currentPos = turf.along(lineaGeo, actualDist);
-                        const nextPos = turf.along(lineaGeo, actualDist + 0.02);
-                        currentBearing = turf.bearing(currentPos, nextPos);
+                    if (oraAttuale >= t_partenza && oraAttuale <= t_arrivo_succ) {
+                        const d1 = turf.nearestPointOnLine(lineaGeo, s1).properties.location;
+                        const d2 = turf.nearestPointOnLine(lineaGeo, s2).properties.location;
+
+                        const progresso = (oraAttuale - t_partenza) / (t_arrivo_succ - t_partenza);
+                        const distanzaAttuale = d1 + (d2 - d1) * progresso;
+
+                        posPunto = turf.along(lineaGeo, distanzaAttuale);
+                        const prossimoPunto = turf.along(lineaGeo, distanzaAttuale + 0.05);
+                        angolo = turf.bearing(posPunto, prossimoPunto);
                         break;
                     }
                 }
             }
 
-            if (currentPos) {
+            if (posPunto) {
                 marker.setOpacity(1);
-                const c = currentPos.geometry.coordinates;
-                marker.setLatLng([c[1], c[0]]);
-                marker.setRotationAngle(currentBearing + 90);
+                const coords = posPunto.geometry.coordinates;
+                marker.setLatLng([coords[1], coords[0]]);
+                marker.setRotationAngle(angolo + 90);
             } else {
                 marker.setOpacity(0);
             }
         }, 1000);
     }
-</script>
-</body>
-</html>
+
+    // --- 5. UTILITY TEMPO ---
+    function convertiInSecondi(hms) {
+        const p = hms.split(':');
+        return (+p[0]) * 3600 + (+p[1]) * 60 + (+p[2] || 0);
