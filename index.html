@@ -2,203 +2,165 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mappa Ferroviaria Campania Live</title>
-
+    <title>Campania Railway Control</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/gh/bbecquet/Leaflet.RotatedMarker/leaflet.rotatedMarker.js"></script>
-
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        #map { height: 100vh; width: 100%; z-index: 1; }
-
-        /* Pannello di controllo stile Travic */
-        .control-panel {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            width: 250px;
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        
+        .panel {
+            position: absolute; top: 15px; left: 50px; z-index: 1000;
+            background: white; padding: 15px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 260px;
         }
-
-        .clock {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2c3e50;
-            text-align: center;
-            margin-bottom: 10px;
-            display: block;
-        }
-
-        .controls {
-            display: flex;
-            justify-content: space-between;
-            gap: 5px;
-        }
-
-        button {
-            cursor: pointer;
-            padding: 8px;
-            border: none;
-            background: #3498db;
-            color: white;
-            border-radius: 4px;
-            flex: 1;
-            font-size: 12px;
-        }
-
+        .clock { font-size: 28px; font-weight: bold; text-align: center; display: block; color: #2c3e50; }
+        .controls { display: flex; justify-content: space-between; margin-top: 10px; gap: 5px; }
+        button { flex: 1; padding: 8px; cursor: pointer; border: none; background: #3498db; color: white; border-radius: 5px; font-size: 11px; }
         button:hover { background: #2980b9; }
-        .status-text { font-size: 11px; color: #7f8c8d; margin-top: 10px; }
+        .train-info { margin-top: 10px; font-size: 12px; color: #7f8c8d; border-top: 1px solid #eee; padding-top: 10px; }
     </style>
 </head>
 <body>
 
-    <div class="control-panel">
-        <span class="clock" id="virtual-clock">00:00:00</span>
-        <div class="controls">
-            <button onclick="changeSpeed(-10)">⏪ x10</button>
-            <button onclick="togglePause()" id="pause-btn">⏸ Pausa</button>
-            <button onclick="changeSpeed(1)">▶️ 1x</button>
-            <button onclick="changeSpeed(10)">x10 ⏩</button>
-        </div>
-        <div class="status-text" id="status">Caricamento binari...</div>
+<div class="panel">
+    <span class="clock" id="txt-ora">00:00:00</span>
+    <div class="controls">
+        <button onclick="setSpeed(-10)">⏪ x10</button>
+        <button onclick="togglePause()" id="btn-pausa">⏸ Pausa</button>
+        <button onclick="setSpeed(1)">▶️ 1x</button>
+        <button onclick="setSpeed(10)">x10 ⏩</button>
+        <button onclick="setSpeed(100)">x100</button>
     </div>
+    <div id="status" class="train-info">Caricamento binari...</div>
+</div>
 
-    <div id="map"></div>
+<div id="map"></div>
 
-    <script>
-        // --- 1. CONFIGURAZIONE MAPPA ---
-        const map = L.map('map').setView([40.8518, 14.2681], 9);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/bbecquet/Leaflet.RotatedMarker/leaflet.rotatedMarker.js"></script>
 
-        // --- 2. LOGICA DEL TEMPO (TIME MACHINE) ---
-        let virtualTime = new Date();
-        let timeMultiplier = 1;
-        let isPaused = false;
-
-        setInterval(() => {
-            if (!isPaused) {
-                virtualTime.setSeconds(virtualTime.getSeconds() + timeMultiplier);
-                document.getElementById('virtual-clock').innerText = virtualTime.toLocaleTimeString();
-            }
-        }, 1000);
-
-        function togglePause() {
-            isPaused = !isPaused;
-            document.getElementById('pause-btn').innerText = isPaused ? "▶️ Play" : "⏸ Pausa";
-        }
-
-        function changeSpeed(speed) {
-            timeMultiplier = speed;
-            isPaused = false;
-        }
-// --- DATABASE TRENI ---
-// Aggiungi qui i treni: basta copiare e incollare una riga
+<script>
+    // --- DATABASE TRENI: AGGIUNGI QUI I TUOI TRENI ---
     const databaseTreni = [
-    {
-        nome: "REGIONALE ",
-        linea: "Napoli-Salerno",
-        fermate: [
-            { nome: "Napoli Centrale", arrivo: "10:00", partenza: "10:05" },
-            { nome: "Portici-Ercolano", arrivo: "10:15", partenza: "10:17" },
-            { nome: "Torre del Greco",  arrivo: "10:25", partenza: "10:27" },
-            { nome: "Torre Annunziata", arrivo: "10:35", partenza: "10:37" },
-            { nome: "Pompei",           arrivo: "10:45", partenza: "10:47" },
-            { nome: "Salerno",          arrivo: "11:00", partenza: "11:05" }
-        ]
-    }
-];
-];
-        // --- 3. CARICAMENTO DATI E BINARI ---
-        fetch('campania_binari.geojson')
-    .then(res => res.json())
-    .then(geojsonData => {
-        // Disegna i binari una sola volta
-        L.geoJSON(geojsonData, { style: { color: '#bdc3c7', weight: 1.5, opacity: 0.5 } }).addTo(map);
+        {
+            nome: "Regionale Campania Express 1",
+            linea: "Ferrovia Napoli-Salerno", // Deve corrispondere al 'name' nel GeoJSON
+            fermate: [
+                { nome: "Napoli Centrale", arrivo: "17:00", partenza: "17:05" },
+                { nome: "Portici",          arrivo: "17:15", partenza: "17:17" },
+                { nome: "Torre del Greco",  arrivo: "17:25", partenza: "17:27" },
+                { nome: "Pompei",           arrivo: "17:40", partenza: "17:42" },
+                { nome: "Salerno",          arrivo: "18:00", partenza: "18:05" }
+            ]
+        },
+        {
+            nome: "Regionale 2",
+            linea: "Ferrovia Napoli-Salerno",
+            fermate: [
+                { nome: "Napoli Centrale", arrivo: "18:30", partenza: "18:35" },
+                { nome: "Salerno",          arrivo: "19:30", partenza: "19:35" }
+            ]
+        }
+    ];
 
-        // CICLO AUTOMATICO: Per ogni treno nel database...
-        databaseTreni.forEach(datiTreno => {
-            
-            // Trova la linea corretta nel GeoJSON per questo treno
-            const lineaCorretta = geojsonData.features.find(f => 
-                f.properties.name === datiTreno.linea
-            );
+    // --- CONFIGURAZIONE MAPPA ---
+    const map = L.map('map').setView([40.8518, 14.2681], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-            if (lineaCorretta) {
-                // Avvia il treno (usiamo la funzione che abbiamo creato prima)
-                creaTrenoAutomatico(lineaCorretta, datiTreno);
-            }
-        });
-    });
-
-// Funzione universale che gestisce qualsiasi treno
-function creaTrenoConFermate(percorso, datiTreno) {
-    const marker = L.marker([0, 0], { icon: iconaTreno }).addTo(map);
-    const lunghezzaTotale = turf.length(percorso, { units: 'kilometers' });
-
-    // Funzione per convertire "HH:MM" in secondi
-    const toSec = (t) => t.split(':').reduce((h, m) => h * 3600 + m * 60);
+    // --- MOTORE DEL TEMPO ---
+    let tempoVirtuale = new Date();
+    let moltiplicatore = 1;
+    let inPausa = false;
 
     setInterval(() => {
-        const adesso = virtualTime.getHours() * 3600 + virtualTime.getMinutes() * 60 + virtualTime.getSeconds();
-        const fermate = datiTreno.fermate;
-        
-        let posAttuale = null;
-        let stato = "Fuori servizio";
-
-        for (let i = 0; i < fermate.length - 1; i++) {
-            const fAttuale = fermate[i];
-            const fSuccessiva = fermate[i+1];
-
-            const partA = toSec(fAttuale.partenza);
-            const arrB = toSec(fSuccessiva.arrivo);
-            const arrA = toSec(fAttuale.arrivo);
-
-            // 1. IL TRENO È FERMO IN STAZIONE?
-            if (adesso >= arrA && adesso <= partA) {
-                const progressoStazione = i / (fermate.length - 1);
-                posAttuale = turf.along(percorso, lunghezzaTotale * progressoStazione);
-                stato = "Fermo a: " + fAttuale.nome;
-                break;
-            }
-
-            // 2. IL TRENO È IN VIAGGIO TRA DUE STAZIONI?
-            if (adesso > partA && adesso < arrB) {
-                const durataTratto = arrB - partA;
-                const tempoTrascorso = adesso - partA;
-                const progressoTratto = tempoTrascorso / durataTratto;
-
-                // Calcoliamo la fetta di binari tra le due stazioni
-                const inizioKms = (i / (fermate.length - 1)) * lunghezzaTotale;
-                const fineKms = ((i + 1) / (fermate.length - 1)) * lunghezzaTotale;
-                const kmsAttuali = inizioKms + (fineKms - inizioKms) * progressoTratto;
-
-                posAttuale = turf.along(percorso, kmsAttuali);
-                stato = "In viaggio verso: " + fSuccessiva.nome;
-                break;
-            }
-        }
-
-        if (posAttuale) {
-            marker.setOpacity(1);
-            const coords = posAttuale.geometry.coordinates;
-            marker.setLatLng([coords[1], coords[0]]);
-            marker.setTooltipContent(`<b>${datiTreno.nome}</b><br>${stato}`);
-        } else {
-            marker.setOpacity(0);
+        if (!inPausa) {
+            tempoVirtuale.setSeconds(tempoVirtuale.getSeconds() + moltiplicatore);
+            document.getElementById('txt-ora').innerText = tempoVirtuale.toLocaleTimeString();
         }
     }, 1000);
-}
-    </script>
+
+    function togglePause() { inPausa = !inPausa; document.getElementById('btn-pausa').innerText = inPausa ? "▶️ Play" : "⏸ Pausa"; }
+    function setSpeed(v) { moltiplicatore = v; inPausa = false; }
+    const toSec = (t) => t.split(':').reduce((h, m) => h * 3600 + m * 60);
+
+    // --- CARICAMENTO BINARI E AVVIO TRENI ---
+    fetch('campania_binari.geojson')
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('status').innerHTML = "Binari pronti. Treni in servizio: " + databaseTreni.length;
+            
+            // Disegna binari
+            L.geoJSON(data, { style: { color: '#bdc3c7', weight: 2, opacity: 0.5 } }).addTo(map);
+
+            // Per ogni treno nel database, cerca il percorso e avvialo
+            databaseTreni.forEach(infoTreno => {
+                const percorso = data.features.find(f => f.properties.name === infoTreno.linea);
+                if (percorso) {
+                    creaTreno(percorso, infoTreno);
+                } else {
+                    console.warn("Linea non trovata per: " + infoTreno.nome);
+                }
+            });
+        });
+
+    function creaTreno(geoJsonLinea, dati) {
+        const icona = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/725/725304.png',
+            iconSize: [30, 30], iconAnchor: [15, 15]
+        });
+
+        const marker = L.marker([0, 0], { icon: icona, rotationAngle: 0 }).addTo(map);
+        const lunghezzaTotale = turf.length(geoJsonLinea, { units: 'kilometers' });
+
+        setInterval(() => {
+            const adesso = tempoVirtuale.getHours() * 3600 + tempoVirtuale.getMinutes() * 60 + tempoVirtuale.getSeconds();
+            let posAttuale = null;
+            let bearing = 0;
+            let infoStato = "In deposito";
+
+            for (let i = 0; i < dati.fermate.length - 1; i++) {
+                const fA = dati.fermate[i];
+                const fB = dati.fermate[i+1];
+                
+                const arrA = toSec(fA.arrivo), partA = toSec(fA.partenza);
+                const arrB = toSec(fB.arrivo), partB = toSec(fB.partenza);
+
+                // STATO 1: Fermo in stazione
+                if (adesso >= arrA && adesso <= partA) {
+                    const dist = (i / (dati.fermate.length - 1)) * lunghezzaTotale;
+                    posAttuale = turf.along(geoJsonLinea, dist);
+                    infoStato = "Fermo a: " + fA.nome;
+                    break;
+                }
+
+                // STATO 2: In viaggio tra A e B
+                if (adesso > partA && adesso < arrB) {
+                    const progressoTratto = (adesso - partA) / (arrB - partA);
+                    const distInizio = (i / (dati.fermate.length - 1)) * lunghezzaTotale;
+                    const distFine = ((i + 1) / (dati.fermate.length - 1)) * lunghezzaTotale;
+                    const distAttuale = distInizio + (distFine - distInizio) * progressoTratto;
+
+                    posAttuale = turf.along(geoJsonLinea, distAttuale);
+                    const posAvanti = turf.along(geoJsonLinea, distAttuale + 0.05);
+                    bearing = turf.bearing(posAttuale, posAvanti);
+                    infoStato = "In viaggio verso: " + fB.nome;
+                    break;
+                }
+            }
+
+            if (posAttuale) {
+                marker.setOpacity(1);
+                const c = posAttuale.geometry.coordinates;
+                marker.setLatLng([c[1], c[0]]);
+                marker.setRotationAngle(bearing + 90);
+                marker.bindTooltip(`<b>${dati.nome}</b><br>${infoStato}`, {sticky: true});
+            } else {
+                marker.setOpacity(0);
+            }
+        }, 1000);
+    }
+</script>
+
 </body>
 </html>
