@@ -32,6 +32,13 @@
         <b>Monitoraggio Treni</b><br>
         Stato: <span id="status">In aggiornamento...</span>
     </div>
+    <div class="pannello">
+    <b>Controllo Tempo:</b> <span id="ora-finta">12:00:00</span><br>
+    <button onclick="cambiaVelocita(-5)">⏪ Indietro</button>
+    <button onclick="togglePausa()" id="btn-pausa">⏸ Pausa</button>
+    <button onclick="cambiaVelocita(5)">Avanti ⏩</button>
+    <button onclick="resetTempo()">Reset Reale</button>
+</div>
 
     <div id="map"></div>
 
