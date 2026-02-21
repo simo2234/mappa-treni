@@ -3,243 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Train Map - Italia</title>
-    
+    <title>Mappa Ferroviaria Campania Live</title>
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/gh/bbecquet/Leaflet.RotatedMarker/leaflet.rotatedMarker.js"></script>
+
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; }
-        #map { height: 100vh; width: 100%; }
-        .info-box {
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { height: 100vh; width: 100%; z-index: 1; }
+
+        /* Pannello di controllo stile Travic */
+        .control-panel {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 20px;
+            left: 20px;
             z-index: 1000;
             background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-            font-family: Arial, sans-serif;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            width: 250px;
         }
+
+        .clock {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            gap: 5px;
+        }
+
+        button {
+            cursor: pointer;
+            padding: 8px;
+            border: none;
+            background: #3498db;
+            color: white;
+            border-radius: 4px;
+            flex: 1;
+            font-size: 12px;
+        }
+
+        button:hover { background: #2980b9; }
+        .status-text { font-size: 11px; color: #7f8c8d; margin-top: 10px; }
     </style>
 </head>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/bbecquet/Leaflet.RotatedMarker/leaflet.rotatedMarker.js"></script>
 <body>
 
-    <div class="info-box">
-        <b>Monitoraggio Treni</b><br>
-        Stato: <span id="status">In aggiornamento...</span>
+    <div class="control-panel">
+        <span class="clock" id="virtual-clock">00:00:00</span>
+        <div class="controls">
+            <button onclick="changeSpeed(-10)">⏪ x10</button>
+            <button onclick="togglePause()" id="pause-btn">⏸ Pausa</button>
+            <button onclick="changeSpeed(1)">▶️ 1x</button>
+            <button onclick="changeSpeed(10)">x10 ⏩</button>
+        </div>
+        <div class="status-text" id="status">Caricamento binari...</div>
     </div>
-    <div class="pannello">
-    <b>Controllo Tempo:</b> <span id="ora-finta">12:00:00</span><br>
-    <button onclick="cambiaVelocita(-5)">⏪ Indietro</button>
-    <button onclick="togglePausa()" id="btn-pausa">⏸ Pausa</button>
-    <button onclick="cambiaVelocita(5)">Avanti ⏩</button>
-    <button onclick="resetTempo()">Reset Reale</button>
-</div>
 
     <div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
     <script>
-        // 1. Inizializzazione Mappa centrata sull'Italia
-        const map = L.map('map').setView([41.9028, 12.4964], 6);
-        
+        // --- 1. CONFIGURAZIONE MAPPA ---
+        const map = L.map('map').setView([40.8518, 14.2681], 9);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
+            attribution: '© OpenStreetMap'
         }).addTo(map);
 
-        // 2. Caricamento Stazioni (dal file stazioni.json che hai creato)
-        fetch('stazioni.json')
+        // --- 2. LOGICA DEL TEMPO (TIME MACHINE) ---
+        let virtualTime = new Date();
+        let timeMultiplier = 1;
+        let isPaused = false;
+
+        setInterval(() => {
+            if (!isPaused) {
+                virtualTime.setSeconds(virtualTime.getSeconds() + timeMultiplier);
+                document.getElementById('virtual-clock').innerText = virtualTime.toLocaleTimeString();
+            }
+        }, 1000);
+
+        function togglePause() {
+            isPaused = !isPaused;
+            document.getElementById('pause-btn').innerText = isPaused ? "▶️ Play" : "⏸ Pausa";
+        }
+
+        function changeSpeed(speed) {
+            timeMultiplier = speed;
+            isPaused = false;
+        }
+
+        // --- 3. CARICAMENTO DATI E BINARI ---
+        fetch('campania_binari.geojson')
             .then(response => response.json())
-            .then(stazioni => {
-                stazioni.forEach(s => {
-                    const lat = s.stop_lat || s.lat;
-                    const lon = s.stop_lon || s.lon;
-                    const nome = s.stop_name || s.name;
-                    
-                    L.circleMarker([lat, lon], {
-                        radius: 3,
-                        color: '#3388ff',
-                        fillOpacity: 0.5
-                    }).addTo(map).bindPopup(nome);
-                });
-                document.getElementById('status').innerText = "Stazioni caricate";
+            .then(geojsonData => {
+                document.getElementById('status').innerText = "Binari caricati. Treno in attesa...";
+                
+                // Disegna la rete ferroviaria Campania di sfondo
+                L.geoJSON(geojsonData, {
+                    style: { color: '#bdc3c7', weight: 1.5, opacity: 0.5 }
+                }).addTo(map);
+
+                // CERCA LA LINEA: Assicurati che il nome "Ferrovia Napoli-Salerno" 
+                // sia presente nel tuo file GeoJSON sotto "name"
+                const lineaNapoliSalerno = geojsonData.features.find(f => 
+                    f.properties.name === "Ferrovia Napoli-Salerno" || f.properties.ref === "L1"
+                );
+
+                if (lineaNapoliSalerno) {
+                    creaTrenoRegionale(lineaNapoliSalerno, "Regionale 21345", 17, 0, 17, 45);
+                } else {
+                    document.getElementById('status').innerText = "Errore: Linea Napoli-Salerno non trovata!";
+                }
             })
             .catch(err => {
-                console.error("Errore stazioni:", err);
-                document.getElementById('status').innerText = "Errore dati stazioni";
+                document.getElementById('status').innerText = "Errore: File GeoJSON non trovato!";
             });
 
-        // 3. Esempio di Treno in movimento (Logica Interpolazione)
-        // In un progetto reale, questi dati arriverebbero da 'orari_treni.json'
-        const trenoEsempio = {
-            id: "FR 9604",
-            partenza: { lat: 41.9009, lon: 12.5020, ora: "14:00" }, // Roma
-            arrivo: { lat: 45.4847, lon: 9.2048, ora: "17:00" }     // Milano
-            id: "R1120",
-        };
+        // --- 4. FUNZIONE CREAZIONE TRENO ---
+        function creaTrenoRegionale(geoJsonPath, nomeTreno, hPartenza, mPartenza, hArrivo, mArrivo) {
+            const trainIcon = L.icon({
+                iconUrl: 'https://cdn-icons-png.flaticon.com/512/725/725304.png',
+                iconSize: [30, 30],
+                iconAnchor: [15, 15]
+            });
 
-        const markerTreno = L.marker([trenoEsempio.partenza.lat, trenoEsempio.partenza.lon], {
-            icon: L.icon({
-                iconUrl: 'https://upload.wikimedia.org/wikipedia/it/4/4f/Treno_Frecciarossa_Logo.png', // Icona treno
-                iconSize: [68, 11,45]
-            })
-        }).addTo(map);
+            const marker = L.marker([0, 0], { icon: trainIcon, rotationAngle: 0 }).addTo(map);
+            const pathLength = turf.length(geoJsonPath, { units: 'kilometers' });
 
-        function muoviTreno() {
-            const oraAttuale = new Date();
-            const oraInSecondi = oraAttuale.getHours() * 3600 + oraAttuale.getMinutes() * 60 + oraAttuale.getSeconds();
+            // Orari convertiti in secondi per facilitare i calcoli
+            const startTimeSec = hPartenza * 3600 + mPartenza * 60;
+            const endTimeSec = hArrivo * 3600 + mArrivo * 60;
 
-            const parseOra = (hms) => {
-                const [h, m] = hms.split(':').map(Number);
-                return h * 3600 + m * 60;
-            };
+            setInterval(() => {
+                const nowSec = virtualTime.getHours() * 3600 + virtualTime.getMinutes() * 60 + virtualTime.getSeconds();
 
-            const tInizio = parseOra(trenoEsempio.partenza.ora);
-            const tFine = parseOra(trenoEsempio.arrivo.ora);
+                if (nowSec >= startTimeSec && nowSec <= endTimeSec) {
+                    marker.setOpacity(1);
+                    
+                    // Calcolo progresso (da 0 a 1)
+                    const progress = (nowSec - startTimeSec) / (endTimeSec - startTimeSec);
+                    const currentDist = pathLength * progress;
 
-            if (oraInSecondi >= tInizio && oraInSecondi <= tFine) {
-                // Calcolo percentuale viaggio
-                const pct = (oraInSecondi - tInizio) / (tFine - tInizio);
-                
-                // Calcolo nuova posizione (lineare)
-                const dLat = trenoEsempio.partenza.lat + (trenoEsempio.arrivo.lat - trenoEsempio.partenza.lat) * pct;
-                const dLon = trenoEsempio.partenza.lon + (trenoEsempio.arrivo.lon - trenoEsempio.partenza.lon) * pct;
-                
-                markerTreno.setLatLng([dLat, dLon]);
-                markerTreno.bindPopup(`<b>${trenoEsempio.id}</b><br>In viaggio verso Milano`).openPopup();
-            } else {
-                markerTreno.setOpacity(0); // Nascondi se fuori orario
-            }
+                    // Calcolo posizione e rotazione con Turf.js
+                    const currentPos = turf.along(geoJsonPath, currentDist, { units: 'kilometers' });
+                    const nextPos = turf.along(geoJsonPath, currentDist + 0.05, { units: 'kilometers' });
+                    
+                    const bearing = turf.bearing(currentPos, nextPos);
+                    const coords = currentPos.geometry.coordinates;
+
+                    marker.setLatLng([coords[1], coords[0]]);
+                    marker.setRotationAngle(bearing + 90); // +90 corregge l'orientamento dell'icona
+                    marker.bindTooltip(nomeTreno, { permanent: false, direction: "top" });
+                } else {
+                    marker.setOpacity(0); // Nascondi se non è orario di viaggio
+                }
+            }, 1000);
         }
-
-        // Aggiorna la posizione ogni secondo
-        setInterval(muoviTreno, 1000);
-        
-<script>
-    // Definizione del treno Regionale
-const trenoRegionale = {
-    nome: "Regionale 21345",
-    linea: "Napoli-Salerno", // Deve corrispondere al nome nel GeoJSON
-    inizio: 17 * 3600,       // Parte alle 17:00:00 (in secondi)
-    fine: 17 * 3600 + 45 * 60, // Arriva alle 17:45:00
-    colore: "green"
-};
-
-function aggiungiRegionale(geoJsonLinea) {
-    // Icona specifica per il Regionale (verde)
-    const iconaRegionale = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/785/785363.png', // Icona diversa
-        iconSize: [25, 25],
-        iconAnchor: [12, 12]
-    });
-
-    const markerRegionale = L.marker([0, 0], { icon: iconaRegionale }).addTo(map);
-    const lunghezza = turf.length(geoJsonLinea, { units: 'kilometers' });
-
-    // Funzione di aggiornamento per questo specifico treno
-    setInterval(() => {
-        const h = tempoVirtuale.getHours();
-        const m = tempoVirtuale.getMinutes();
-        const s = tempoVirtuale.getSeconds();
-        const adesso = h * 3600 + m * 60 + s;
-
-        if (adesso >= trenoRegionale.inizio && adesso <= trenoRegionale.fine) {
-            markerRegionale.setOpacity(1);
-            
-            // Calcolo progresso
-            const progresso = (adesso - trenoRegionale.inizio) / (trenoRegionale.fine - trenoRegionale.inizio);
-            const pos = lunghezza * progresso;
-
-            const punto = turf.along(geoJsonLinea, pos, { units: 'kilometers' });
-            const puntoAvanti = turf.along(geoJsonLinea, pos + 0.1, { units: 'kilometers' });
-            
-            const coords = punto.geometry.coordinates;
-            const bearing = turf.bearing(punto, puntoAvanti);
-
-            markerRegionale.setLatLng([coords[1], coords[0]]);
-            markerRegionale.setRotationAngle(bearing + 90);
-            markerRegionale.bindTooltip(trenoRegionale.nome, {permanent: false, direction: "top"});
-        } else {
-            markerRegionale.setOpacity(0);
-        }
-    }, 1000);
-}
+    </script>
 </body>
-    
-<script>
-// 1. Inizializza la mappa sulla Campania
-const map = L.map('map').setView([40.8518, 14.2681], 9);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-// 2. Carica il file GeoJSON della Campania
-fetch('campania.geojson')
-    .then(response => response.json())
-    .then(data => {
-        // Disegna tutti i binari in grigio (sfondo)
-        L.geoJSON(data, {
-            style: { color: '#bdc3c7', weight: 2, opacity: 0.5 }
-        }).addTo(map);
-
-        // 3. ESTRAZIONE PERCORSO: Cerchiamo la linea specifica
-        // NOTA: 'name' deve corrispondere a quello che c'è nel tuo file
-        const featureLinea = data.features.find(f => 
-            f.properties.name === "Ferrovia Napoli-Salerno" || f.properties.ref === "L2"
-        );
-
-        if (featureLinea) {
-            avviaAnimazioneTreno(featureLinea);
-        } else {
-            console.error("Linea non trovata! Controlla i nomi nel file GeoJSON.");
-        }
-    });
-
-function avviaAnimazioneTreno(geoJsonLinea) {
-    // Crea l'icona del treno
-    const iconaTreno = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/725/725304.png',
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
-    });
-
-    const markerTreno = L.marker([0, 0], { icon: iconaTreno, rotationAngle: 0 }).addTo(map);
-    const linea = geoJsonLinea.geometry;
-    const distanzaTotale = turf.length(geoJsonLinea, { units: 'kilometers' });
-
-    function muovi() {
-        const ora = new Date();
-        const adesso = ora.getHours() * 3600 + ora.getMinutes() * 60 + ora.getSeconds();
-
-        // Esempio: Il treno parte alle 16:30 e arriva alle 17:15
-        const inizio = 16 * 3600 + 30 * 60; 
-        const fine = 17 * 3600 + 15 * 60;
-
-        if (adesso >= inizio && adesso <= fine) {
-            const progresso = (adesso - inizio) / (fine - inizio);
-            const distanzaPercorsa = distanzaTotale * progresso;
-
-            // Punto attuale
-            const punto = turf.along(geoJsonLinea, distanzaPercorsa, { units: 'kilometers' });
-            // Punto leggermente avanti per calcolare la rotazione
-            const puntoAvanti = turf.along(geoJsonLinea, distanzaPercorsa + 0.1, { units: 'kilometers' });
-            
-            const bearing = turf.bearing(punto, puntoAvanti);
-            const [lon, lat] = punto.geometry.coordinates;
-
-            markerTreno.setLatLng([lat, lon]);
-            if (markerTreno.setRotationAngle) {
-                markerTreno.setRotationAngle(bearing + 90); // +90 dipende dall'orientamento dell'immagine
-            }
-            markerTreno.bindPopup("<b>Treno Regionale Campania</b><br>In viaggio...").openPopup();
-        } else {
-            markerTreno.setOpacity(0); // Nascondi se non è orario di viaggio
-        }
-    }
-
-    setInterval(muovi, 1000); // Aggiorna ogni secondo
-}
 </html>
