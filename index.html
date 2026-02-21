@@ -92,7 +92,7 @@
     // --- 4. CARICAMENTO GEOJSON E LOGICA TRENI ---
     // Carichiamo tutto: binari, stazioni e il database treni appena creato
 Promise.all([
-    fetch('campania_binari.geojson').then(r => r.json()),
+    fetch('Binari_Campania-Lazio.geojson').then(r => r.json()),
     fetch('stazioni_campania.geojson').then(r => r.json()),
     fetch('database_treni.json').then(r => r.json()) 
 ]).then(([binariData, stazioniData, treniDB]) => {
