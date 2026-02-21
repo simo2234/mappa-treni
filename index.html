@@ -30,6 +30,14 @@
         <button onclick="setSpeed(1)">▶️ 1x</button>
         <button onclick="setSpeed(10)">x10 ⏩</button>
         <button onclick="setSpeed(100)">x100</button>
+    <div style="margin-top:10px;">
+        <input type="date" id="input-data" onchange="aggiornaDataOra()">
+        <input type="time" id="input-ora" step="1" onchange="aggiornaDataOra()">
+    </div>
+
+    <div class="controls">
+        </div>
+</div>
     </div>
     <div id="status" class="train-info">Caricamento binari...</div>
 </div>
@@ -41,6 +49,30 @@
 <script src="https://cdn.jsdelivr.net/gh/bbecquet/Leaflet.RotatedMarker/leaflet.rotatedMarker.js"></script>
 
 <script>
+    // Funzione per cambiare il tempo della mappa in base agli input
+function aggiornaDataOra() {
+    const dataScelta = document.getElementById('input-data').value; // Es: "2023-10-25"
+    const oraScelta = document.getElementById('input-ora').value;   // Es: "14:30:00"
+
+    if (dataScelta && oraScelta) {
+        // Creiamo un nuovo oggetto data unendo le stringhe
+        tempoVirtuale = new Date(dataScelta + 'T' + oraScelta);
+        
+        // Mettiamo in pausa per permettere all'utente di guardare quel momento preciso
+        inPausa = true;
+        document.getElementById('btn-pausa').innerText = "▶️ Play";
+        
+        // Forza l'aggiornamento immediato del clock
+        document.getElementById('txt-ora').innerText = tempoVirtuale.toLocaleTimeString();
+    }
+}
+
+// Opzionale: Imposta i selettori sull'ora attuale al caricamento della pagina
+window.onload = () => {
+    const oraDoc = new Date();
+    document.getElementById('input-data').value = oraDoc.toISOString().split('T')[0];
+    document.getElementById('input-ora').value = oraDoc.toTimeString().split(' ')[0];
+};
     // --- DATABASE TRENI: AGGIUNGI QUI I TUOI TRENI ---
     const databaseTreni = [
         {
