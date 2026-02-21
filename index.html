@@ -2,34 +2,46 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>Simulatore Ferroviario Centro-Sud</title>
+    <title>Simulatore Ferroviario Nazionale</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif; }
-        #map { height: 100vh; width: 100%; background: #1a1a1a; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { height: 100vh; width: 100%; background: #0f172a; }
         
+        /* Pannello di Controllo Moderno */
         .ui-panel {
-            position: absolute; top: 15px; left: 15px; z-index: 1000;
-            background: rgba(255, 255, 255, 0.9); padding: 20px; border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.4); width: 300px;
+            position: absolute; top: 20px; left: 20px; z-index: 1000;
+            background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3); width: 320px; border: 1px solid #e2e8f0;
         }
-        .clock { font-size: 32px; font-weight: bold; color: #2c3e50; font-family: monospace; display: block; text-align: center; }
-        .controls { margin-top: 15px; display: flex; flex-direction: column; gap: 10px; }
-        .status-box { margin-top: 10px; font-size: 12px; color: #555; border-top: 1px solid #ccc; padding-top: 5px; }
-        input[type="time"] { width: 100%; padding: 8px; border-radius: 5px; border: 1px solid #ddd; }
-        button { padding: 10px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 5px; font-weight: bold; }
-        button:hover { background: #2980b9; }
+        .clock { font-size: 36px; font-weight: 800; color: #1e293b; font-family: 'Courier New', monospace; display: block; text-align: center; letter-spacing: 2px; }
+        .status-indicator { margin-top: 15px; font-size: 13px; color: #64748b; border-top: 1px solid #cbd5e1; padding-top: 10px; }
+        .loading-bar { height: 4px; width: 0%; background: #3b82f6; transition: width 0.3s; margin-top: 5px; }
+        
+        .controls { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { padding: 10px; cursor: pointer; border: none; border-radius: 8px; font-weight: 600; transition: all 0.2s; }
+        .btn-primary { background: #3b82f6; color: white; grid-column: span 2; }
+        .btn-speed { background: #f1f5f9; color: #475569; }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
     </style>
 </head>
 <body>
 
 <div class="ui-panel">
-    <span class="clock" id="txt-ora">12:00:00</span>
+    <span class="clock" id="txt-ora">00:00:00</span>
+    
     <div class="controls">
-        <input type="time" id="input-ora" step="1" onchange="impostaOra()">
-        <button onclick="resetTempo()">TORNA AL PRESENTE</button>
+        <button class="btn-primary" onclick="resetTempo()">RESET AL PRESENTE</button>
+        <button class="btn-speed" onclick="setSpeed(1)">1x</button>
+        <button class="btn-speed" onclick="setSpeed(10)">10x</button>
+        <button class="btn-speed" onclick="setSpeed(60)">1min/s</button>
+        <button class="btn-speed" onclick="setSpeed(0)">PAUSA</button>
     </div>
-    <div id="status" class="status-box">Caricamento file GeoJSON...</div>
+
+    <div class="status-indicator">
+        <span id="status-text">Inizializzazione sistema...</span>
+        <div class="loading-bar" id="load-progress"></div>
+    </div>
 </div>
 
 <div id="map"></div>
@@ -39,139 +51,133 @@
 <script src="https://cdn.jsdelivr.net/gh/bbecquet/Leaflet.RotatedMarker/leaflet.rotatedMarker.js"></script>
 
 <script>
-    // --- 1. CONFIGURAZIONE FILE ---
-    const FILE_BINARI = ['Binari_Veneto.geojson', 'Binari_Emilia-Romagna.geojson', 'Binari_Marche.geojson', 'Binari_Abruzzo.geojson', 'Binari_Molise.geojson', 'Binari_Puglia.geojson'];
-    const FILE_STAZIONI = ['stazioni_lazio.geojson', 'stazioni_campania.geojson'];
+    // --- CONFIGURAZIONE REGIONI ---
+    const REGIONI = ['lazio', 'campania', 'veneto', 'emilia', 'marche', 'abruzzo', 'molise', 'puglia'];
     const FILE_TRENI = 'database_treni.json';
 
-    // --- 2. INIZIALIZZAZIONE MAPPA ---
-    const map = L.map('map', { zoomControl: false }).setView([41.5, 13.5], 8);
+    // --- SETUP MAPPA ---
+    const map = L.map('map', { zoomControl: false }).setView([42.5, 13.5], 7);
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
     let virtualTime = new Date();
-    const pulisciNome = (n) => n.toString().toLowerCase().trim().replace(/\s+/g, ' ');
+    let timeMultiplier = 1;
+    const pulisciStr = (s) => s ? s.toString().toLowerCase().trim().replace(/\s+/g, ' ') : "";
 
-    // --- 3. CARICAMENTO MULTI-FILE ---
-    async function init() {
+    // --- CARICAMENTO DATI ---
+    async function boot() {
+        const status = document.getElementById('status-text');
+        const progress = document.getElementById('load-progress');
+        
         try {
-            // Carichiamo tutti i file in parallelo
-            const fetchBinari = FILE_BINARI.map(f => fetch(f).then(res => res.json()));
-            const fetchStazioni = FILE_STAZIONI.map(f => fetch(f).then(res => res.json()));
-            const fetchTreni = fetch(FILE_TRENI).then(res => res.json());
+            // Generazione automatica dei nomi dei file
+            const urlsBinari = REGIONI.map(r => `binari_${r}.geojson`);
+            const urlsStazioni = REGIONI.map(r => `stazioni_${r}.geojson`);
 
-            const [dataBinari, dataStazioni, treniDB] = await Promise.all([
-                Promise.all(fetchBinari),
-                Promise.all(fetchStazioni),
-                fetchTreni
+            status.innerText = "Scarico binari e stazioni...";
+            progress.style.width = "30%";
+
+            const [allBinari, allStazioni, treniDB] = await Promise.all([
+                Promise.all(urlsBinari.map(url => fetch(url).then(r => r.json()))),
+                Promise.all(urlsStazioni.map(url => fetch(url).then(r => r.json()))),
+                fetch(FILE_TRENI).then(r => r.json())
             ]);
 
-            // Uniamo i binari in un'unica collezione
-            const reteUnificata = {
-                type: "FeatureCollection",
-                features: dataBinari.flatMap(g => g.features)
-            };
+            progress.style.width = "70%";
+            status.innerText = "Unificazione rete nazionale...";
 
-            // Uniamo le stazioni
-            const stazioniUnificate = {
-                type: "FeatureCollection",
-                features: dataStazioni.flatMap(g => g.features)
-            };
+            // Unificazione Geografica
+            const reteNazionale = { type: "FeatureCollection", features: allBinari.flatMap(g => g.features) };
+            const stazioniNazionali = { type: "FeatureCollection", features: allStazioni.flatMap(g => g.features) };
 
-            document.getElementById('status').innerText = "Rete caricata. Simulazione attiva.";
+            // Disegno Binari (Leggero)
+            L.geoJSON(reteNazionale, { style: { color: '#334155', weight: 1, opacity: 0.5 } }).addTo(map);
 
-            // Disegniamo la rete sulla mappa
-            L.geoJSON(reteUnificata, { 
-                style: { color: '#444', weight: 1.5, opacity: 0.6 } 
-            }).addTo(map);
+            status.innerText = "Simulazione avviata.";
+            progress.style.width = "100%";
 
-            // Avviamo ogni treno
+            // Avvio Treni
             treniDB.forEach(treno => {
-                const tracciato = reteUnificata.features.find(f => 
-                    pulisciNome(f.properties.name || "") === pulisciNome(treno.linea)
+                // Cerchiamo tutti i segmenti che compongono la linea (fondamentale per tratte interregionali)
+                const segmentiLinea = reteNazionale.features.filter(f => 
+                    pulisciStr(f.properties.name) === pulisciStr(treno.linea)
                 );
-                if (tracciato) {
-                    avviaSimulazioneTreno(tracciato, treno, stazioniUnificate);
-                } else {
-                    console.warn(`Binari non trovati per: ${treno.linea}`);
+
+                if (segmentiLinea.length > 0) {
+                    // Uniamo i segmenti in un'unica linea continua
+                    const lineaUnita = segmentiLinea.length > 1 ? turf.lineString(segmentiLinea.flatMap(s => s.geometry.coordinates)) : segmentiLinea[0];
+                    avviaTreno(lineaUnita, treno, stazioniNazionali);
                 }
             });
 
-        } catch (err) {
-            document.getElementById('status').innerHTML = "<span style='color:red'>Errore caricamento file! Controlla i nomi.</span>";
-            console.error(err);
+        } catch (e) {
+            status.innerText = "Errore: File mancanti o corrotti.";
+            console.error(e);
         }
     }
 
-    // --- 4. MOTORE DI MOVIMENTO ---
-    function avviaSimulazioneTreno(lineaGeo, dati, stazioniGeo) {
-        const icona = L.icon({ 
-            iconUrl: 'https://cdn-icons-png.flaticon.com/512/725/725304.png', 
-            iconSize: [22, 22] 
-        });
-        const marker = L.marker([0, 0], { icon: icona, rotationAngle: 0 }).addTo(map);
-        marker.bindPopup(`<b>${dati.nome}</b><br>Linea: ${dati.linea}`);
-
+    // --- MOTORE DI SIMULAZIONE ---
+    function avviaTreno(linea, dati, stazioni) {
+        const icon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/725/725304.png', iconSize: [20, 20] });
+        const marker = L.marker([0,0], { icon: icon, rotationAngle: 0 }).addTo(map);
+        
         setInterval(() => {
-            const oraAttuale = virtualTime.getHours() * 3600 + virtualTime.getMinutes() * 60 + virtualTime.getSeconds();
-            let posPunto = null;
-            let angolo = 0;
+            if (timeMultiplier === 0) return;
+
+            const oraSec = virtualTime.getHours() * 3600 + virtualTime.getMinutes() * 60 + virtualTime.getSeconds();
+            let currentPos = null;
+            let currentBearing = 0;
 
             for (let i = 0; i < dati.fermate.length - 1; i++) {
                 const f1 = dati.fermate[i];
                 const f2 = dati.fermate[i+1];
 
-                const s1 = stazioniGeo.features.find(s => pulisciNome(s.properties.name) === pulisciNome(f1.stazione));
-                const s2 = stazioniGeo.features.find(s => pulisciNome(s.properties.name) === pulisciNome(f2.stazione));
+                const s1 = stazioni.features.find(s => pulisciStr(s.properties.name) === pulisciStr(f1.stazione));
+                const s2 = stazioni.features.find(s => pulisciStr(s.properties.name) === pulisciStr(f2.stazione));
 
                 if (s1 && s2) {
-                    const t_partenza = convertiInSecondi(f1.part);
-                    const t_arrivo_succ = convertiInSecondi(f2.arr);
+                    const t1 = convertiOra(f1.part);
+                    const t2 = convertiOra(f2.arr);
 
-                    if (oraAttuale >= t_partenza && oraAttuale <= t_arrivo_succ) {
-                        const d1 = turf.nearestPointOnLine(lineaGeo, s1).properties.location;
-                        const d2 = turf.nearestPointOnLine(lineaGeo, s2).properties.location;
+                    if (oraSec >= t1 && oraSec <= t2) {
+                        const loc1 = turf.nearestPointOnLine(linea, s1).properties.location;
+                        const loc2 = turf.nearestPointOnLine(linea, s2).properties.location;
+                        
+                        const progresso = (oraSec - t1) / (t2 - t1);
+                        const dist = loc1 + (loc2 - loc1) * progresso;
 
-                        const progresso = (oraAttuale - t_partenza) / (t_arrivo_succ - t_partenza);
-                        const distanzaAttuale = d1 + (d2 - d1) * progresso;
-
-                        posPunto = turf.along(lineaGeo, distanzaAttuale);
-                        const prossimoPunto = turf.along(lineaGeo, distanzaAttuale + 0.05);
-                        angolo = turf.bearing(posPunto, prossimoPunto);
+                        currentPos = turf.along(linea, dist);
+                        const nextPos = turf.along(linea, dist + 0.1);
+                        currentBearing = turf.bearing(currentPos, nextPos);
                         break;
                     }
                 }
             }
 
-            if (posPunto) {
+            if (currentPos) {
                 marker.setOpacity(1);
-                const coords = posPunto.geometry.coordinates;
-                marker.setLatLng([coords[1], coords[0]]);
-                marker.setRotationAngle(angolo + 90);
-            } else {
-                marker.setOpacity(0);
-            }
+                marker.setLatLng([currentPos.geometry.coordinates[1], currentPos.geometry.coordinates[0]]);
+                marker.setRotationAngle(currentBearing + 90);
+            } else { marker.setOpacity(0); }
         }, 1000);
     }
 
-    // --- 5. UTILITY TEMPO ---
-    function convertiInSecondi(hms) {
-        const p = hms.split(':');
-        return (+p[0]) * 3600 + (+p[1]) * 60 + (+p[2] || 0);
+    // --- UTILITIES ---
+    function convertiOra(hms) {
+        const [h, m] = hms.split(':');
+        return h * 3600 + m * 60;
     }
 
-    function resetTempo() { virtualTime = new Date(); aggiornaUI(); }
-    function impostaOra() {
-        const [h, m, s] = document.getElementById('input-ora').value.split(':');
-        virtualTime.setHours(h, m, s || 0);
-    }
-    function aggiornaUI() {
-        document.getElementById('txt-ora').innerText = virtualTime.toLocaleTimeString();
-    }
+    function setSpeed(s) { timeMultiplier = s; }
+    function resetTempo() { virtualTime = new Date(); timeMultiplier = 1; }
+    
+    setInterval(() => {
+        if (timeMultiplier > 0) {
+            virtualTime.setSeconds(virtualTime.getSeconds() + timeMultiplier);
+            document.getElementById('txt-ora').innerText = virtualTime.toLocaleTimeString('it-IT');
+        }
+    }, 1000);
 
-    setInterval(() => { virtualTime.setSeconds(virtualTime.getSeconds() + 1); aggiornaUI(); }, 1000);
-
-    // Lancio iniziale
-    init();
+    boot();
 </script>
 </body>
 </html>
