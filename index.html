@@ -26,52 +26,6 @@
     </script>
 </body>
 </html>
-    <script>
-    // 1. Setup Mappa
-    var map = L.map('map').setView([43.7695, 11.2558], 7); // Centrata sulla Toscana
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-    // 2. Dati del viaggio (Esempio: Roma -> Milano)
-    const viaggio = {
-        numero: "Frecciarossa 9604",
-        partenza: { lat: 41.9009, lon: 12.5020, orario: "14:00" }, // Roma Termini
-        arrivo: { lat: 45.4847, lon: 9.2048, orario: "17:00" }     // Milano Centrale
-    };
-
-    // Creiamo il marker del treno
-    var trenoMarker = L.marker([viaggio.partenza.lat, viaggio.partenza.lon]).addTo(map);
-
-    // 3. Funzione di calcolo posizione
-    function aggiornaPosizione() {
-        const ora = new Date();
-        const adesso = ora.getHours() * 3600 + ora.getMinutes() * 60 + ora.getSeconds();
-
-        // Convertiamo gli orari del treno in secondi dall'inizio della giornata
-        const convertiInSecondi = (hms) => {
-            const [h, m] = hms.split(':').map(Number);
-            return h * 3600 + m * 60;
-        };
-
-        const inizioInSecondi = convertiInSecondi(viaggio.partenza.orario);
-        const fineInSecondi = convertiInSecondi(viaggio.arrivo.orario);
-
-        if (adesso >= inizioInSecondi && adesso <= fineInSecondi) {
-            // Calcoliamo la percentuale del viaggio (da 0 a 1)
-            const progresso = (adesso - inizioInSecondi) / (fineInSecondi - inizioInSecondi);
-
-            // Interpolazione lineare (Latitudine e Longitudine)
-            const latAttuale = viaggio.partenza.lat + (viaggio.arrivo.lat - viaggio.partenza.lat) * progresso;
-            const lonAttuale = viaggio.partenza.lon + (viaggio.arrivo.lon - viaggio.partenza.lon) * progresso;
-
-            trenoMarker.setLatLng([latAttuale, lonAttuale]);
-            trenoMarker.bindPopup(`<b>${viaggio.numero}</b><br>In viaggio...`).openPopup();
-        } else {
-            trenoMarker.bindPopup("Treno non in viaggio").openPopup();
-        }
-    }
-
-    // Aggiorna ogni secondo
-    setInterval(aggiornaPosizione, 1000);
     </script>
 const stazioniItaliane = [
     { nome: "Roma Termini", lat: 41.9009, lon: 12.5020 },
@@ -92,3 +46,4 @@ stazioniItaliane.forEach(stazione => {
      .addTo(map)
      .bindPopup(stazione.nome);
 });
+</script>
