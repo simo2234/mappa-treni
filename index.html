@@ -119,40 +119,6 @@
 
         // Aggiorna la posizione ogni secondo
         setInterval(muoviTreno, 1000);
-        
-<script>
-let tempoVirtuale = new Date(); // Parte dall'ora attuale
-let moltiplicatore = 1; // 1 = tempo reale, 5 = veloce, -5 = indietro, 0 = pausa
-let inPausa = false;
-
-// Funzione che fa avanzare l'orologio virtuale
-setInterval(() => {
-    if (!inPausa) {
-        // Aggiunge 1 secondo moltiplicato per la velocità scelta
-        tempoVirtuale.setSeconds(tempoVirtuale.getSeconds() + moltiplicatore);
-        
-        // Aggiorna l'orologio nel pannello
-        document.getElementById('ora-finta').innerText = tempoVirtuale.toLocaleTimeString();
-    }
-}, 1000);
-
-// Funzioni per i pulsanti
-function togglePausa() {
-    inPausa = !inPausa;
-    document.getElementById('btn-pausa').innerText = inPausa ? "▶️ Play" : "⏸ Pausa";
-}
-
-function cambiaVelocita(valore) {
-    moltiplicatore = valore;
-    inPausa = false;
-    document.getElementById('btn-pausa').innerText = "⏸ Pausa";
-}
-
-function resetTempo() {
-    tempoVirtuale = new Date();
-    moltiplicatore = 1;
-    inPausa = false;
-}
     </script>
 </body>
     
