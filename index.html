@@ -85,7 +85,7 @@
     const toSec = (t) => t.split(':').reduce((h, m) => h * 3600 + m * 60);
 
     // --- CARICAMENTO BINARI E AVVIO TRENI ---
-    fetch('campania_binari.geojson')
+    fetch('Campania.geojson')
         .then(res => res.json())
         .then(data => {
             document.getElementById('status').innerHTML = "Binari pronti. Treni in servizio: " + databaseTreni.length;
